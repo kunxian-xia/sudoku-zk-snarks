@@ -1,0 +1,14 @@
+
+set(CMAKE_CXX_STANDARD 11)
+
+add_definitions(-DCURVE=BN128)
+
+include_directories(/usr/local/include)
+
+link_directories(/usr/local/lib)
+
+add_executable(sudoku main.cpp sudoku_gadget.hpp)
+target_link_libraries(sudoku ff)
+target_link_libraries(sudoku gmpxx)
+target_link_libraries(sudoku gmp)
+target_link_libraries(sudoku procps)
