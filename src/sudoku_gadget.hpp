@@ -25,7 +25,7 @@ public:
     validateInput_gadget(protoboard<FieldT> &pb,
                          const pb_variable<FieldT> &x,
                          const std::vector<int> &values,
-                         const std::string &annotation_prefix = "") :
+                         const std::string &annotation_prefix = "validate Input") :
             gadget<FieldT>(pb, annotation_prefix), x(x), values(values) {
         intermediates.allocate(pb, values.size() - 1, FMT(annotation_prefix, "intermediates"));
     }
@@ -65,7 +65,7 @@ public:
 
     checkEquality_gadget(protoboard<FieldT> &pb,
                          const pb_variable_array<FieldT> &inputs,
-                         const std::string &annotation_prefix) :
+                         const std::string &annotation_prefix = "checkEquality") :
             gadget<FieldT>(pb, annotation_prefix), inputs(inputs) {
 
         inv.allocate(pb, FMT(annotation_prefix, "inv"));
@@ -203,31 +203,61 @@ public:
         c_cols.reserve(4);
         c_grids.reserve(4);
 
-        c_rows[0].reset(new checkEquality_gadget<FieldT>(pb, {a11, a12, b11, b12}));
-        c_rows[1].reset(new checkEquality_gadget<FieldT>(pb, {a21, a22, b21, b22}));
-        c_rows[2].reset(new checkEquality_gadget<FieldT>(pb, {c11, c12, d11, d12}));
-        c_rows[3].reset(new checkEquality_gadget<FieldT>(pb, {c21, c22, d21, d22}));
+        std::vector<pb_variable<FieldT>> row0 = {a11, a12, b11, b12};
+        std::vector<pb_variable<FieldT>> row1 = {a21, a22, b21, b22};
+        std::vector<pb_variable<FieldT>> row2 = {c11, c12, d11, d12};
+        std::vector<pb_variable<FieldT>> row3 = {c21, c22, d21, d22};
 
-        c_cols[0].reset(new checkEquality_gadget<FieldT>(pb, {a11, a21, c11, c21}));
-        c_cols[1].reset(new checkEquality_gadget<FieldT>(pb, {a12, a22, c12, c22}));
-        c_cols[2].reset(new checkEquality_gadget<FieldT>(pb, {b11, b21, d11, d21}));
-        c_cols[3].reset(new checkEquality_gadget<FieldT>(pb, {b12, b22, d12, d22}));
+        pb_variable_array<FieldT> _row0(row0.begin(), row0.end());
+        pb_variable_array<FieldT> _row1(row1.begin(), row1.end());
+        pb_variable_array<FieldT> _row2(row2.begin(), row2.end());
+        pb_variable_array<FieldT> _row3(row3.begin(), row3.end());
 
-        c_grids[0].reset(new checkEquality_gadget<FieldT>(pb, {a11, a12, a21, a22}));
-        c_grids[1].reset(new checkEquality_gadget<FieldT>(pb, {b11, b12, b21, b22}));
-        c_grids[2].reset(new checkEquality_gadget<FieldT>(pb, {c11, c12, c21, c22}));
-        c_grids[3].reset(new checkEquality_gadget<FieldT>(pb, {d11, d12, d21, d22}));
+        c_rows[0].reset(new checkEquality_gadget<FieldT>(pb, _row0));
+        c_rows[1].reset(new checkEquality_gadget<FieldT>(pb, _row1));
+        c_rows[2].reset(new checkEquality_gadget<FieldT>(pb, _row2));
+        c_rows[3].reset(new checkEquality_gadget<FieldT>(pb, _row3));
+
+        std::vector<pb_variable<FieldT>> col0 = {a11, a21, c11, c21};
+        std::vector<pb_variable<FieldT>> col1 = {a12, a22, c12, c22};
+        std::vector<pb_variable<FieldT>> col2 = {b11, b21, d11, d21};
+        std::vector<pb_variable<FieldT>> col3 = {b12, b22, d12, d22};
+
+        pb_variable_array<FieldT> _col0(col0.begin(), col0.end());
+        pb_variable_array<FieldT> _col1(col1.begin(), col1.end());
+        pb_variable_array<FieldT> _col2(col2.begin(), col2.end());
+        pb_variable_array<FieldT> _col3(col3.begin(), col3.end());
+
+        c_cols[0].reset(new checkEquality_gadget<FieldT>(pb, _col0));
+        c_cols[1].reset(new checkEquality_gadget<FieldT>(pb, _col1));
+        c_cols[2].reset(new checkEquality_gadget<FieldT>(pb, _col2));
+        c_cols[3].reset(new checkEquality_gadget<FieldT>(pb, _col3));
+
+        std::vector<pb_variable<FieldT>> grid0 = {a11, a12, a21, a22};
+        std::vector<pb_variable<FieldT>> grid1 = {b11, b12, b21, b22};
+        std::vector<pb_variable<FieldT>> grid2 = {c11, c12, c21, c22};
+        std::vector<pb_variable<FieldT>> grid3 = {d11, d12, d21, d22};
+
+        pb_variable_array<FieldT> _grid0(grid0.begin(), grid0.end());
+        pb_variable_array<FieldT> _grid1(grid1.begin(), grid1.end());
+        pb_variable_array<FieldT> _grid2(grid2.begin(), grid2.end());
+        pb_variable_array<FieldT> _grid3(grid3.begin(), grid3.end());
+
+        c_grids[0].reset(new checkEquality_gadget<FieldT>(pb, _grid0));
+        c_grids[1].reset(new checkEquality_gadget<FieldT>(pb, _grid1));
+        c_grids[2].reset(new checkEquality_gadget<FieldT>(pb, _grid2));
+        c_grids[3].reset(new checkEquality_gadget<FieldT>(pb, _grid3));
     }
 
     void generate_r1cs_constraints() {
         for (size_t i = 0; i < 16; i++) {
-            v_inputs[i].generate_r1cs_constraints();
+            v_inputs[i]->generate_r1cs_constraints();
         }
 
         for (size_t i = 0; i < 4; i++) {
-            c_rows[i].generate_r1cs_constraints();
-            c_cols[i].generate_r1cs_constraints();
-            c_grids[i].generate_r1cs_constraints();
+            c_rows[i]->generate_r1cs_constraints();
+            c_cols[i]->generate_r1cs_constraints();
+            c_grids[i]->generate_r1cs_constraints();
         }
     }
 
