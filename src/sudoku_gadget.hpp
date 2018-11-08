@@ -1,9 +1,5 @@
-//
-// Created by xkx on 11/1/18.
-//
-
-#ifndef SUDOKU_ZK_SNARKS_GADGET_HPP
-#define SUDOKU_ZK_SNARKS_GADGET_HPP
+#ifndef _SUDOKU_GADGET_HPP
+#define _SUDOKU_GADGET_HPP
 
 #include <libsnark/gadgetlib1/gadget.hpp>
 #include <memory>
@@ -11,7 +7,7 @@
 using namespace libsnark;
 
 /*
- * validate Input comes from the set {}
+ * validate Input comes from the set {v1, ..., vn}
  * equivalent to constraint (x - v1) ... (x - vn) = 0
  */
 template<typename FieldT>
@@ -38,26 +34,28 @@ public:
 
         for (size_t i = 1; i < values.size() - 1; i++) {
             this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(
-                    {ONE * (-values[i]), x},
-                    {intermediates[i - 1]},
-                    {intermediates[i]}));
+                    { ONE * (-values[i]), x},
+                    { intermediates[i-1] },
+                    { intermediates[i] }));
         }
     }
 
-    void generate_r1cs_witness(int _x) {
-        this->pb.val(x) = FieldT(_x);
+    void generate_r1cs_witness() {
+        FieldT _x = this->pb.val(x);
         this->pb.val(intermediates[0]) = FieldT((_x - values[0]) * (_x - values[1]));
-        for (size_t i = 0; i < values.size() - 1; i++) {
+        for (size_t i = 1; i < values.size() - 1; i++) {
             this->pb.val(intermediates[i]) = this->pb.val(intermediates[i - 1]) * (_x - values[i]);
         }
     }
 };
 
+/*
+ * validate that the elements in inputs are different from each other
+ * which is equivalent to the constraint that \prod (inputs[i] - inputs[j]) * inv = 1
+ */
 template<typename FieldT>
 class checkEquality_gadget : public gadget<FieldT> {
 private:
-    /* */
-
 public:
     pb_variable<FieldT> inv;
     pb_variable_array<FieldT> inputs;
@@ -78,7 +76,7 @@ public:
         size_t counter = 0;
         for (size_t i = 0; i < inputs.size() - 1; i++) {
             for (size_t j = i + 1; j < inputs.size(); j++) {
-                if (i == 0 && j == 0) {
+                if (i == 0 && j == 1) {
                     this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(
                             {ONE},
                             {inputs[i], inputs[j] * (-1)},
@@ -102,11 +100,16 @@ public:
         ));
     }
 
-    void generate_r1cs_witness(const std::vector<int> &_inputs) {
+    void generate_r1cs_witness() {
+        std::vector<FieldT> _inputs(inputs.size());
+        for (size_t i = 0; i < inputs.size(); i++) {
+            _inputs[i] = this->pb.val(inputs[i]);
+        }
+
         int counter = 0;
         for (size_t i = 0; i < inputs.size(); i++) {
             for (size_t j = i + 1; j < inputs.size(); j++) {
-                if (i == 0 && j == 0) {
+                if (i == 0 && j == 1) {
                     this->pb.val(intermediates[counter]) = _inputs[0] - _inputs[1];
                 } else {
                     this->pb.val(intermediates[counter]) = this->pb.val(intermediates[counter - 1]) *
@@ -115,6 +118,7 @@ public:
                 counter++;
             }
         }
+        this->pb.val(inv) = this->pb.val(intermediates[counter-1]).inverse();
     }
 };
 
@@ -190,19 +194,22 @@ public:
 
         pb.set_input_sizes(6);
 
+        //input validation
         std::vector<pb_variable<FieldT>> inputs = {a11, a12, a21, a22,
                                                    b11, b12, b21, b22,
                                                    c11, c12, c21, c22,
                                                    d11, d12, d21, d22};
         v_inputs.reserve(16);
+        v_inputs.resize(16);
         for (size_t i = 0; i < 16; i++) {
             v_inputs[i].reset(new validateInput_gadget<FieldT>(pb, inputs[i], {1, 2, 3, 4}));
         }
 
-        c_rows.reserve(4);
-        c_cols.reserve(4);
-        c_grids.reserve(4);
+        c_rows.reserve(4); c_rows.resize(4);
+        c_cols.reserve(4); c_cols.resize(4);
+        c_grids.reserve(4); c_grids.resize(4);
 
+        //row validation
         std::vector<pb_variable<FieldT>> row0 = {a11, a12, b11, b12};
         std::vector<pb_variable<FieldT>> row1 = {a21, a22, b21, b22};
         std::vector<pb_variable<FieldT>> row2 = {c11, c12, d11, d12};
@@ -218,6 +225,7 @@ public:
         c_rows[2].reset(new checkEquality_gadget<FieldT>(pb, _row2));
         c_rows[3].reset(new checkEquality_gadget<FieldT>(pb, _row3));
 
+        //column validation
         std::vector<pb_variable<FieldT>> col0 = {a11, a21, c11, c21};
         std::vector<pb_variable<FieldT>> col1 = {a12, a22, c12, c22};
         std::vector<pb_variable<FieldT>> col2 = {b11, b21, d11, d21};
@@ -233,6 +241,7 @@ public:
         c_cols[2].reset(new checkEquality_gadget<FieldT>(pb, _col2));
         c_cols[3].reset(new checkEquality_gadget<FieldT>(pb, _col3));
 
+        //subgrid validation
         std::vector<pb_variable<FieldT>> grid0 = {a11, a12, a21, a22};
         std::vector<pb_variable<FieldT>> grid1 = {b11, b12, b21, b22};
         std::vector<pb_variable<FieldT>> grid2 = {c11, c12, c21, c22};
@@ -261,7 +270,45 @@ public:
         }
     }
 
-    void generate_r1cs_witness();
+    void generate_r1cs_witness(const std::vector<int> &_inputs_a,
+                               const std::vector<int> &_inputs_b,
+                               const std::vector<int> &_inputs_c,
+                               const std::vector<int> &_inputs_d) {
+        assert(_inputs_a.size() == 4);
+        assert(_inputs_b.size() == 4);
+        assert(_inputs_c.size() == 4);
+        assert(_inputs_d.size() == 4);
+
+        this->pb.val(a11) = _inputs_a[0];
+        this->pb.val(a12) = _inputs_a[1];
+        this->pb.val(a21) = _inputs_a[2];
+        this->pb.val(a22) = _inputs_a[3];
+
+        this->pb.val(b11) = _inputs_b[0];
+        this->pb.val(b12) = _inputs_b[1];
+        this->pb.val(b21) = _inputs_b[2];
+        this->pb.val(b22) = _inputs_b[3];
+
+        this->pb.val(c11) = _inputs_c[0];
+        this->pb.val(c12) = _inputs_c[1];
+        this->pb.val(c21) = _inputs_c[2];
+        this->pb.val(c22) = _inputs_c[3];
+
+        this->pb.val(d11) = _inputs_d[0];
+        this->pb.val(d12) = _inputs_d[1];
+        this->pb.val(d21) = _inputs_d[2];
+        this->pb.val(d22) = _inputs_d[3];
+
+        for (size_t i = 0; i < 16; i++) {
+            v_inputs[i]->generate_r1cs_witness();
+        }
+
+        for (size_t i = 0; i < 4; i++) {
+            c_rows[i]->generate_r1cs_witness();
+            c_cols[i]->generate_r1cs_witness();
+            c_grids[i]->generate_r1cs_witness();
+        }
+    }
 };
 
-#endif //SUDOKU_ZK_SNARKS_GADGET_HPP
+#endif //_SUDOKU_GADGET_HPP
